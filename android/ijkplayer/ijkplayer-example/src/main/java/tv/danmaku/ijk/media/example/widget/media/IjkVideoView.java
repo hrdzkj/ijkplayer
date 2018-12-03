@@ -21,10 +21,12 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
@@ -41,7 +43,9 @@ import android.widget.TextView;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -566,9 +570,9 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                                 .setPositiveButton(R.string.VideoView_error_button,
                                         new DialogInterface.OnClickListener() {
                                             public void onClick(DialogInterface dialog, int whichButton) {
-                                            /* If we get here, there is no onError listener, so
-                                             * at least inform them that the video is over.
-                                             */
+                                                /* If we get here, there is no onError listener, so
+                                                 * at least inform them that the video is over.
+                                                 */
                                                 if (mOnCompletionListener != null) {
                                                     mOnCompletionListener.onCompletion(mMediaPlayer);
                                                 }
@@ -1037,6 +1041,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer = new IjkMediaPlayer();
                     ijkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_DEBUG);
 
+                    /*
                     if (mSettings.getUsingMediaCodec()) {
                         ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1);
                         if (mSettings.getUsingMediaCodecAutoRotate()) {
@@ -1071,6 +1076,47 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0);
 
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+
+                    // 强制使用tcp https://www.jianshu.com/p/512241bd655a
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp");
+                    */
+
+                    //大华配置： https://blog.csdn.net/qq_23315815/article/details/78060542
+                    /**
+                     * 参数解释
+                     * https://www.jianshu.com/p/80c56f47a870
+                     * https://www.jianshu.com/p/843c86a9e9ad
+                     * https://www.jianshu.com/p/810da6aea58f
+                     *
+                     * i帧帧率和码率对播放延迟和稳定性影响比较打，越小播放延迟越短，越稳定。
+                     */
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp");
+
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 20);//60
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-fps", 0);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "fps", 30);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", IjkMediaPlayer.SDL_FCC_YV12);
+
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer");
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max-buffer-size", 1024);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 10);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probsize", "4096");
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", "2000000");
+
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER,"reconnect",1000);
+
+
+                    // 无效，考虑能否监听断开后重新调用 mVideoView.setVideoPath(mPlayerUrl); mVideoView.start() https://github.com/Bilibili/ijkplayer/issues/4346
+                    // 参考 https://github.com/Bilibili/ijkplayer/issues/62
+                    //新增
+                    //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT,"analyzemaxduration",100L);
+                    //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT,"flush_packets",1L);//每处理一个packet之后刷新io上下文
+                    //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1);
+                    //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec_mpeg4", 1);
+                    //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "iformat", "h264"); //reade to unkown
                 }
                 mediaPlayer = ijkMediaPlayer;
             }
@@ -1083,6 +1129,35 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
         return mediaPlayer;
     }
+
+
+    private boolean mIsRecording = false;
+    //开始录像
+    public int startRecord(String filePath) {
+        if (mMediaPlayer instanceof IjkMediaPlayer ) {
+            return ((IjkMediaPlayer)mMediaPlayer).startRecord(filePath);
+        }
+        return -1;
+    }
+
+    //结束录像
+    public int stopRecord() {
+        if (mMediaPlayer instanceof IjkMediaPlayer) {
+            return ((IjkMediaPlayer)mMediaPlayer).stopRecord();
+        }
+        return -1;
+    }
+
+
+
+    public  boolean isRecording()
+    {
+        if (mMediaPlayer instanceof IjkMediaPlayer) {
+            return  ((IjkMediaPlayer)mMediaPlayer).isRecording();
+        }
+        return false;
+    }
+
 
     //-------------------------
     // Extend: Background
@@ -1257,5 +1332,15 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     public int getSelectedTrack(int trackType) {
         return MediaPlayerCompat.getSelectedTrack(mMediaPlayer, trackType);
+    }
+
+    /**
+     * reference https://www.jianshu.com/p/79b434b2d5c8
+     *  add by liuyi 加入截图方法
+     * @return  返回图片
+     */
+    @TargetApi(14)
+    public Bitmap getShortcut() {
+        return this.mRenderView instanceof TextureRenderView ? ((TextureRenderView)this.mRenderView).getBitmap() : null;
     }
 }

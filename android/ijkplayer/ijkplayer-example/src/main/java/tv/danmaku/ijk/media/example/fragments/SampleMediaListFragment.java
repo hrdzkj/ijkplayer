@@ -18,22 +18,44 @@
 package tv.danmaku.ijk.media.example.fragments;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+import android.text.InputType;
+import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import io.reactivex.functions.Consumer;
+import okhttp3.Call;
+import okhttp3.Response;
 import tv.danmaku.ijk.media.example.R;
 import tv.danmaku.ijk.media.example.activities.VideoActivity;
+import tv.danmaku.ijk.media.example.util.ConstHttp;
+import tv.danmaku.ijk.media.example.util.HttpUtil;
+import tv.danmaku.ijk.media.example.util.JsonData;
+import tv.danmaku.ijk.media.example.util.MakeRequestMap;
 
-public class SampleMediaListFragment extends Fragment {
+/**
+ * 高空摄像头10.13.17.11; 10.13.25.11
+ */
+public class SampleMediaListFragment extends Fragment implements View.OnClickListener{
     private ListView mFileListView;
     private SampleMediaAdapter mAdapter;
 
@@ -50,23 +72,58 @@ public class SampleMediaListFragment extends Fragment {
         return viewGroup;
     }
 
+    private void jumpActivityByInputIp()
+    {
+        EditText editText = new EditText(getActivity());
+        editText.setText("10.13.27.7"); //25.11   17.11 正常：10.13.19.11
+        editText.setInputType(InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        new AlertDialog.Builder(getActivity())
+                .setTitle("请输入摄像头IP")
+                .setIcon(android.R.drawable.ic_dialog_info)
+                .setView(editText )
+                .setPositiveButton("确定", (dialog, which) -> {
+                    String ip = editText.getText().toString();
+                    if (TextUtils.isEmpty(ip))
+                    {
+                        Toast.makeText(getContext(),"请录入IP",Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String url = "rtsp://admin:admin@"+ip+":554";
+                    doJumpActivity("liuyi test play over VPN",url);
+
+                })
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    private void doJumpActivity(String name,String url)
+    {
+        VideoActivity.intentTo(getActivity(), url, name);
+    }
+
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
 
-        final Activity activity = getActivity();
-
-        mAdapter = new SampleMediaAdapter(activity);
+        //final Activity activity = getActivity();
+        mAdapter = new SampleMediaAdapter(getActivity());
         mFileListView.setAdapter(mAdapter);
-        mFileListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, final int position, final long id) {
+        mFileListView.setOnItemClickListener((parent, view, position, id) -> {
+            if (position==0){
+                jumpActivityByInputIp();
+            }else {
                 SampleMediaItem item = mAdapter.getItem(position);
-                String name = item.mName;
-                String url = item.mUrl;
-                VideoActivity.intentTo(activity, url, name);
+                doJumpActivity(item.mUrl, item.mName);
             }
         });
+
+        //mAdapter.addItem("rtsp://admin:admin@10.13.27.7:554","liuyi test play over VPN");
+        mAdapter.addItem("rtsp://admin:admin@youIp:554","liuyi test play over VPN");
+        mAdapter.addItem("rtsp://nvs:nvs@nvs.3322.org:554","vs.3322.org:");
+        mAdapter.addItem("rtsp://184.72.239.149/vod/mp4://BigBuckBunny_175k.mov","rtsp://184.72.239.149/vod/mp4://BigBuckBunny_175k.mov");
+        mAdapter.addItem("rtsp://113.136.42.45:554/PLTV/88888888/224/3221226087/10000100000000060000000001759104_0.smil"," test play ");
+
+        mAdapter.addItem("rtmp://pull-g.kktv8.com/livekktv/100987038", "liuyi test play rtmp");
 
         mAdapter.addItem("http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8", "bipbop basic master playlist");
         mAdapter.addItem("http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/gear1/prog_index.m3u8", "bipbop basic 400x300 @ 232 kbps");
@@ -81,6 +138,51 @@ public class SampleMediaListFragment extends Fragment {
         mAdapter.addItem("http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/gear4/prog_index.m3u8", "bipbop advanced 1289x720 @ 1 Mbps");
         mAdapter.addItem("http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/gear5/prog_index.m3u8", "bipbop advanced 1920x1080 @ 2 Mbps");
         mAdapter.addItem("http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_16x9/gear0/prog_index.m3u8", "bipbop advanced 22.050Hz stereo @ 40 kbps");
+    }
+
+    @Override
+    public void onClick(View v) {
+        doGetRtspUrl();
+    }
+
+
+    private void doGetRtspUrl() {
+        JsonData para = JsonData.create("{}");
+        para.put("userName","tongfu001");
+        para.put("password","login");
+        Map<String,String> map = MakeRequestMap.makeRequestMap("getRtspURL",para);
+        HttpUtil.postFormBody(this,ConstHttp.HOST, map, new okhttp3.Callback() {
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                getActivity().runOnUiThread(() -> {
+                    try {
+                        String resultString = response.body().string();
+                        if (resultString==null)
+                        {
+                          Toast.makeText(getContext(),"返回 null",Toast.LENGTH_SHORT).show();
+                            return ;
+                        }
+
+                        if (resultString.contains("rtsp"))
+                        {
+                            VideoActivity.intentTo(SampleMediaListFragment.this.getActivity(), resultString, "Huawei RTSP");
+                        }else{
+                            Toast.makeText(getContext(),"没有 rtsp 返回 :"+resultString,Toast.LENGTH_SHORT).show();
+                        }
+                        Log.v("---->", resultString);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
+
+            @Override
+            public void onFailure(Call call, IOException e) {
+                e.printStackTrace();
+            }
+        });
+
+
     }
 
     final class SampleMediaItem {

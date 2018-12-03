@@ -17,9 +17,11 @@
 
 package tv.danmaku.ijk.media.example.activities;
 
+import android.Manifest;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -37,10 +39,20 @@ import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.TableLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import com.tbruyelle.rxpermissions2.RxPermissions;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import tv.danmaku.ijk.media.example.R;
+import tv.danmaku.ijk.media.example.util.Config;
+import tv.danmaku.ijk.media.example.util.ImageUtils;
+import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
-import tv.danmaku.ijk.media.example.R;
+
 import tv.danmaku.ijk.media.example.application.Settings;
 import tv.danmaku.ijk.media.example.content.RecentMediaStorage;
 import tv.danmaku.ijk.media.example.fragments.TracksFragment;
@@ -48,11 +60,15 @@ import tv.danmaku.ijk.media.example.widget.media.AndroidMediaController;
 import tv.danmaku.ijk.media.example.widget.media.IjkVideoView;
 import tv.danmaku.ijk.media.example.widget.media.MeasureHelper;
 
+import static tv.danmaku.ijk.media.example.widget.media.IjkVideoView.RENDER_TEXTURE_VIEW;
+
+
 public class VideoActivity extends AppCompatActivity implements TracksFragment.ITrackHolder {
     private static final String TAG = "VideoActivity";
-
+    private final RxPermissions rxPermissions = new RxPermissions(this);
     private String mVideoPath;
-    private Uri    mVideoUri;
+    private Uri mVideoUri;
+
 
     private AndroidMediaController mMediaController;
     private IjkVideoView mVideoView;
@@ -138,19 +154,23 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         IjkMediaPlayer.native_profileBegin("libijkplayer.so");
 
         mVideoView = (IjkVideoView) findViewById(R.id.video_view);
+        mVideoView.setRender(RENDER_TEXTURE_VIEW);  // 截屏需要设置
         mVideoView.setMediaController(mMediaController);
         mVideoView.setHudView(mHudView);
-        // prefer mVideoPath
-        if (mVideoPath != null)
-            mVideoView.setVideoPath(mVideoPath);
-        else if (mVideoUri != null)
-            mVideoView.setVideoURI(mVideoUri);
-        else {
-            Log.e(TAG, "Null Data Source\n");
-            finish();
-            return;
-        }
-        mVideoView.start();
+        mVideoView.setOnCompletionListener(new IMediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(IMediaPlayer mp) {
+                Log.v("liuyi------>", "IMediaPlayer.OnCompletionListener is call");
+                if(mVideoView.isRecording())
+                {
+                    mVideoView.stopRecord();
+                }
+                if (mVideoUri != null) { // 播放网络地址，进行重新启动
+                    startPlay();
+                }
+            }
+        });
+        startPlay();
     }
 
     @Override
@@ -173,6 +193,31 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         }
         IjkMediaPlayer.native_profileEnd();
     }
+
+
+    private void startPlay() {
+        if (mVideoPath != null) {
+            mVideoView.setVideoPath(mVideoPath);
+        } else if (mVideoUri != null) mVideoView.setVideoURI(mVideoUri);
+        else {
+            Log.e(TAG, "Null Data Source\n");
+            finish();
+            return;
+        }
+        mVideoView.start();
+    }
+
+    private String mFilePath = "/mnt/sdcard/111/";
+
+    private void doCapture() {
+        Bitmap bitmap = mVideoView.getShortcut();
+        if (bitmap != null) {
+            String pathFile = mFilePath + "lena.jpg"; //Config.CACHE_PATH + "lena.jpg"
+            boolean save = ImageUtils.save(bitmap, pathFile, Bitmap.CompressFormat.JPEG);
+            Toast.makeText(this, save ? "successful" : "failed", Toast.LENGTH_SHORT).show();
+        }
+    }
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -219,6 +264,35 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
                 transaction.commit();
                 mDrawerLayout.openDrawer(mRightDrawer);
             }
+        } else if (id == R.id.action_short_cut) { // 截图
+
+            rxPermissions.request(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE).subscribe(granted -> {
+                if (granted) {
+                    // All requested permissions are granted
+                    doCapture();
+                } else {
+                    Toast.makeText(this, "尚未授权", Toast.LENGTH_SHORT).show();
+                }
+            });
+
+
+        } else if (id == R.id.action_record) { //录像
+            try {
+                //各种容器支持的压缩格式对比：https://en.wikipedia.org/wiki/Comparison_of_video_container_formats
+                if (mVideoView.isPlaying()) {
+                    if (!mVideoView.isRecording()) {
+                        String path = mFilePath + new SimpleDateFormat("yyyyMMddHHmmss").format(new Date()) + ".mov";
+                        mVideoView.startRecord(path);
+                    } else {
+                        mVideoView.stopRecord();
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }finally {
+                item.setTitle(mVideoView.isRecording()?"停止":"录像" );
+            }
+
         }
 
         return super.onOptionsItemSelected(item);
@@ -226,8 +300,7 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
 
     @Override
     public ITrackInfo[] getTrackInfo() {
-        if (mVideoView == null)
-            return null;
+        if (mVideoView == null) return null;
 
         return mVideoView.getTrackInfo();
     }
@@ -244,8 +317,7 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
 
     @Override
     public int getSelectedTrack(int trackType) {
-        if (mVideoView == null)
-            return -1;
+        if (mVideoView == null) return -1;
 
         return mVideoView.getSelectedTrack(trackType);
     }

@@ -29,6 +29,21 @@
 #include "ff_fferror.h"
 #include "ff_ffmsg.h"
 
+/**
+*** add by liuyi begin
+*** 录像参照的实现
+*** https://www.jianshu.com/p/a346f93ddaff
+*** https://www.jianshu.com/p/8078446fdbe6
+***
+*** 截屏参照的实现：
+*** https://www.jianshu.com/p/79b434b2d5c8
+***/
+int       ffp_start_record(FFPlayer *ffp, const char *file_name);
+int       ffp_stop_record(FFPlayer *ffp);
+int       ffp_record_file(FFPlayer *ffp, AVPacket *packet);
+int       ffp_is_recording(FFPlayer *ffp);
+/******add by liuyi end ***********/
+
 void      ffp_global_init();
 void      ffp_global_uninit();
 void      ffp_global_set_log_report(int use_report);
