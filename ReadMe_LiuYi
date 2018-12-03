@@ -1,0 +1,59 @@
+
+java端jni接口：./ijkplayer/android/ijkplayer/ijkplayer-java/src/main/java/tv/danmaku/ijk/media/player/IjkMediaPlayer.java
+java端封装jin后应用层接口:./ijkplayer/android/ijkplayer/ijkplayer-example/src/main/java/tv/danmaku/ijk/media/example/widget/media/IjkVideoView.java
+jni函数注册地：./ijkplayer/ijkmedia>ijkplayer>android>ijkplayer_jni.c
+ffplay层用到对象的定义：./ijkplayer/ijkmedia/ijkplayer/ff_ffplay_def.h
+ffplay层用到函数的定义与实现：./ijkplayer/ijkmedia/ijkplayer/ff_player.h  
+                          ./ijkplayer/ijkmedia/ijkplayer/ff_player.c
+                          
+// 查找流类型
+int ffp_find_video_stream(FFPlayer *ffp)
+{
+    int streamIndex; 
+    for(streamIndex=0; streamIndex<ffp->m_ofmt_ctx->nb_streams; streamIndex++){
+       AVStream *stream = ffp->m_ofmt_ctx->streams[streamIndex];
+       if (stream->codec->codec_type == AVMEDIA_TYPE_VIDEO){
+         break;
+       }
+    } 
+    return streamIndex;
+}
+
+
+// 输出编码器中剩余的AVPacket
+int flush_encoder(FFPlayer *ffp,unsigned int stream_index)
+{
+    int ret;
+    int got_frame;
+    AVPacket enc_pkt;
+    AVStream *out_stream = ffp->m_ofmt_ctx->streams[stream_index];
+
+    if(!(out_stream->codec->codec->capabilities & CODEC_CAP_DELAY)) return 0;
+    while (1) {
+       av_log(NULL, AV_LOG_INFO, "Flushingstream #%u encoder\n", stream_index);
+       got_frame = 0;
+        //ret =encode_write_frame(ffp,NULL, stream_index, &got_frame);
+       ret = encode_frame(ffp,NULL,enc_pkt,stream_index, &got_frame);
+        if (ret < 0)
+            break;
+        if (!got_frame)
+            return 0;
+    }
+    return ret;
+}
+
+// 遍历PacketQueue中的Packet
+void save_cache_packet(FFPlayer *ffp,PacketQueue *q) { 
+    MyAVPacketList *tempNode = NULL;
+    tempNode = q->first_pkt;
+    while(tempNode)
+    {
+      ffp_record_file(ffp,&(tempNode->pkt));
+      tempNode = tempNode->next;
+    }
+}
+
+//编码一帧
+encode_write_frame(FFPlayer *ffp,AVFrame *filt_frame, unsignedint stream_index, int *got_frame);
+
+
